@@ -1,0 +1,411 @@
+{
+  "cells": [
+    {
+      "metadata": {
+        "_uuid": "14727e3089a3a45c00b3851f6ad1a98f1e17f71d",
+        "_execution_state": "idle",
+        "trusted": true,
+        "scrolled": true
+      },
+      "cell_type": "code",
+      "source": "## Importing packages\n\n# This R environment comes with all of CRAN and many other helpful packages preinstalled.\n# You can see which packages are installed by checking out the kaggle/rstats docker image: \n# https://github.com/kaggle/docker-rstats\n\nlibrary(tidyverse) # metapackage with lots of helpful functions\nknitr::opts_chunk$set(echo = TRUE)\nlibrary(tidytext)\nlibrary(stringr)\nlibrary(scales)\nlibrary(forcats)\nlibrary(wordcloud)\ndevtools::install_github(\"cpsievert/LDAvisData\")\nlibrary(LDAvis)\nlibrary(jsonlite)\nlibrary(tm)\n## Running code\n\n# In a notebook, you can run a single code cell by clicking in the cell and then hitting \n# the blue arrow to the left, or by clicking in the cell and pressing Shift+Enter. In a script, \n# you can run code by highlighting the code you want to run and then clicking the blue arrow\n# at the bottom of this window.\n\n## Reading in files\n\n# You can access files from datasets you've added to this kernel in the \"../input/\" directory.\n# You can see the files added to this kernel by running the code below. \n\nfolder = \"../input/bbc news summary/BBC News Summary/\"\n\n## Saving data\n\n# If you save any files or images, these will be put in the \"output\" directory. You \n# can see the output directory by committing and running your kernel (using the \n# Commit & Run button) and then checking out the compiled version of your kernel.",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7d6b2415381a025e2944cdb501d2656c28be8aab"
+      },
+      "cell_type": "code",
+      "source": "txt_from_folder <- function(subfolder) {\n    path = str_c(folder, subfolder)\n    print(path)\n    files <- list.files(path, pattern = \"txt\") #список файлов в папке\n    \n    for (i in (1:length(files))) {\n        filename <- str_c(path, files[i])\n        lines <- read_lines(filename,\n                               locale = locale(encoding = \"UTF-8\"))\n        lines <- lines[lines != '']\n        text <- data_frame(doc_name = str_c(str_replace(files[i],\".txt\",\"\"), subfolder), \n                             line = 1:length(lines), text = lines, theme = subfolder)\n\n        if (i==1) {texts <- text}\n        else {texts <- union_all(texts, text)}\n     }\n\n    texts\n}",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "71672bdf6984a2659b89e13b1baff99599b53839"
+      },
+      "cell_type": "markdown",
+      "source": "## Загрузка для начала двух тем: политика и бизнес"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "scrolled": true,
+        "_uuid": "7d6b2415381a025e2944cdb501d2656c28be8aab"
+      },
+      "cell_type": "code",
+      "source": "docs_politics <- txt_from_folder(\"News Articles/politics/\")\ndocs_business <- txt_from_folder(\"News Articles/business/\")",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "be6a78b01d3afa92e768d67b7a55918ed1aef762"
+      },
+      "cell_type": "code",
+      "source": "head(docs_politics)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "5ee6bb131463d14ead98755b7a0f7e09b5ac9618"
+      },
+      "cell_type": "code",
+      "source": "full_df <- union_all(docs_business, docs_politics)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "e9ad21a694f8cf5887756b18ba2e8c9b4e76dcbc"
+      },
+      "cell_type": "code",
+      "source": "articles <- full_df %>%\n  unnest_tokens(word, text)\n\n\narticles %>%\n  count(word, sort = TRUE) %>%\n  top_n(10, wt = n) %>%\n  ungroup()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "a49a922c17009ffb98c330f3d1a3a604bb01199f"
+      },
+      "cell_type": "markdown",
+      "source": "### Так, в первом десятке самых часто встречающихся слов - только слова общего назначения, всякие артикули.\n\nУдалим их, используя список stop_word из пакета tidytext:"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "a0a31619fa3816d8ccbc66dd720f7aef6b612d34"
+      },
+      "cell_type": "code",
+      "source": "tidy_articles <- articles %>%\n    mutate(word = str_extract(word, \"[a-z']+\")) %>%\n    anti_join(stop_words) %>%\n    filter(str_detect(word, \"[a-z']\"))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "0d5a9dcb1fd092c17230484556b2738cd7664344"
+      },
+      "cell_type": "code",
+      "source": "tidy_articles %>%\n  group_by(theme) %>%\n  count(word, sort = TRUE) %>%\n  top_n(10, wt = n) %>%\n  ungroup() %>%\n  ggplot(aes(x = reorder(word, n), y = n, fill = theme)) +\n  geom_bar(stat = \"identity\") +\n  coord_flip() +\n  labs(title = \"Most frequently words in theme\",\n       x = \"Words\", y = \"Amount of words in theme\",\n       fill = \"Papers\")",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "6a084841ae6584f10b0c8db2574b1358b78a3059"
+      },
+      "cell_type": "markdown",
+      "source": "### Кроме того, нам позарез необходимо построить облако весело раскрашенных тэгов:"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "2621d4fcfd421663883b77dd15f739a323e7ff5c"
+      },
+      "cell_type": "code",
+      "source": "tidy_articles %>%\n    count(word) %>%\n    with(wordcloud(word, n, max.words = 100, colors=brewer.pal(8, \"Dark2\")))\n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "1ae8c2f217962b5603fb3bfa2d7920aae9613d67"
+      },
+      "cell_type": "markdown",
+      "source": "### Посчитали здесь корреляцию тем и сделали из этого какой-нибудь вывод:"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7d67e86c46e06e57dc5c1a1825d28bfc0c7b76a8"
+      },
+      "cell_type": "code",
+      "source": "frequency <- tidy_articles %>%\n  count(theme, word) %>%\n  group_by(theme) %>%\n  mutate(proportion = n / sum(n)) %>% \n  select(-n) %>% \n  spread(theme, proportion, fill = 0)\nhead(frequency)\n\ncor.test(data = frequency, \n         ~ `News Articles/business/` + `News Articles/politics/`)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7a514c360f0a8152574978bd941bebbd9d2bf11c"
+      },
+      "cell_type": "markdown",
+      "source": "### Строим частотный график для тем до и после удаления стоп-слов:"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "3db3d8434179d406cc57b4309aeb4b80036d273c"
+      },
+      "cell_type": "code",
+      "source": "article_words <- full_df %>%\n  unnest_tokens(word, text) %>%\n  mutate(word = str_extract(word, \"[a-z']+\")) %>%\n  filter(!is.na(word))\n\nword_freq <- article_words%>%\n  count(theme, word) %>%\n  group_by(theme) %>%\n  mutate(freq = n / sum(n)) \n\nword_freq2 <- tidy_articles %>%\n    mutate(theme = str_c(theme,  \" without stop words\")) %>%\n  count(theme, word) %>%\n  group_by(theme) %>%\n  mutate(freq = n / sum(n))\n    \n\n\nunion_all(word_freq, word_freq2) %>% \n  ggplot(aes(freq, fill = theme)) +\n  geom_histogram(show.legend = FALSE, bins = 40) +\n  #xlim(NA, 0.006) +\n  facet_wrap(~theme, ncol = 2) +\n  labs(title = \"Word frequency distribution\",\n       y = \"Amount of words\", x = \"Frequency\")",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "e07d5d5f0bec8c7f3046887c3cdf9138b9295127"
+      },
+      "cell_type": "markdown",
+      "source": "### Сейчас будем считать метрику tf-idf, которая является мерой того, насколько слово уникально для своей темы. \n\nТак и узнаем, какие слова являются маркерами темы"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "c3a63e3d2d66b153869db092834a307a4596c6c7"
+      },
+      "cell_type": "code",
+      "source": "word_tf_idf <- word_freq %>%\n  bind_tf_idf(word, theme, n) %>%\n  select(-freq) \n\nhead(word_tf_idf)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "5b3c5b2f54cd46bdfc4336a5d2796d8069039a0f"
+      },
+      "cell_type": "code",
+      "source": "word_tf_idf %>%\n  arrange(desc(tf_idf)) %>%\n  top_n(20) %>%\n  ggplot(aes(x = reorder(word, tf_idf), tf_idf, fill = theme)) +\n  geom_col() +\n  labs(x = NULL, y = \"tf-idf\", fill = \"Papers\", title = \"The most important words in themes\") +\n  coord_flip()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "15ae574c827550dc8880ffa31cc6ffbdd9f60d70"
+      },
+      "cell_type": "markdown",
+      "source": "### Что ж, пришло время подкинуть данные в наш корпус документов.\n\n### Добавим остальные три темы:"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "34b134201da4f051f87ec4e1b795d76675100258"
+      },
+      "cell_type": "code",
+      "source": "new_full_df <- rbind(full_df\n                         ,txt_from_folder(\"News Articles/tech/\")\n                         ,txt_from_folder(\"News Articles/entertainment/\")\n                         ,txt_from_folder(\"News Articles/sport/\"))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "ba4fabdda6968434f2731ebcd38b3c1ea5ceb986"
+      },
+      "cell_type": "markdown",
+      "source": "### Ранее мы строили частотный график Word frequency distribution, и он неудовлетворительный, все равно распределение частот очень скошенное.\n\nОтличное решение: надо сформировать свой кастомный список стоп-слов!: считается (как в тренинге), что туда попадают слова, которые присутствуют во всех темах, и с высокой частотой"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "29cc072f825921f7d1b7a58917afeb7778cef52e"
+      },
+      "cell_type": "code",
+      "source": "words_tf_idf <- new_full_df %>%\n  unnest_tokens(word, text) %>%\n  anti_join(stop_words) %>%\n  mutate(word = str_extract(word, \"[a-z']+\")) %>%\n  filter(!is.na(word)) %>%\n  count(theme, word) %>%\n  bind_tf_idf(word, theme, n) %>%\n  group_by(theme) %>%\n  mutate(total = sum(n)) %>%\n  ungroup() %>%\n  arrange(desc(tf_idf))\n\ncustom_stop_words <- words_tf_idf %>% \n  filter(idf==0) %>%\n  group_by(word) %>%\n  summarise(frequency = sum(n)/sum(total)) %>%\n  filter(frequency > 0.00025) %>%\n  arrange(desc(frequency))\n\nprint(custom_stop_words)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "841aaf724879fe6a02aa4e4505025f7fdc1daf0f"
+      },
+      "cell_type": "code",
+      "source": "tidy_articles <- new_full_df %>%\n    unnest_tokens(word, text) %>%\n    filter(!word %in% custom_stop_words$word) %>%\n    filter(!word %in% stop_words$word) %>%\n    filter(str_detect(word,\"[a-z]\"))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "1221813639561f4edc3ccc4b87c6f3069d3d990e"
+      },
+      "cell_type": "markdown",
+      "source": "## Теперь сложный перформанс: построение карты признакового пространства\n### Используем визуальную библиотечку serVis для построения тем чисто по лексике, без указания заголовков.\n#### Необходимо сделать ряд преобразований, сначала - сформировать словарь всех-всех слов, без повторений. Это будут измерения для нашего признакового пространства"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "9dd5bd56303137168f81c5d5e917c105ad2cf47a"
+      },
+      "cell_type": "code",
+      "source": "# compute the table of terms:\nterm.table <- table(unlist(tidy_articles$word))\nterm.table <- sort(term.table, decreasing = TRUE)\n\n# remove terms that are stop words or occur fewer than 5 times:\ndel <- names(term.table) %in% stop_words | term.table < 5\nterm.table <- term.table[!del]\nvocab <- names(term.table)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "3eb0131dce4feb8cb10ef2e622d44faa3417e02a"
+      },
+      "cell_type": "markdown",
+      "source": "### Теперь каждое слово всех документов кодируем в соответствии со словарем - подписываем однёрки"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "b38388635266e234a8faf488ea5ce7da37bd93b3"
+      },
+      "cell_type": "code",
+      "source": "# now put the documents into the format required by the lda package:\nget.terms <- function(x) {\n  index <- match(x$word, vocab)\n  index <- index[!is.na(index)]\n  rbind(as.integer(index - 1), as.integer(rep(1, length(index))))\n}\ndocuments <- lapply(split.data.frame(tidy_articles, tidy_articles$doc_name), get.terms)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "ad7a78bbc2a68b098b075881fac18b29c90e1965"
+      },
+      "cell_type": "code",
+      "source": "documents[1]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7360a8daa97dd34444d973fbda745987d2204e65"
+      },
+      "cell_type": "code",
+      "source": "# Вычисляем некоторые статистики\nD <- length(documents)  # number of documents (2,000)\nW <- length(vocab)  # number of terms in the vocab (14,568)\ndoc.length <- sapply(documents, function(x) sum(x[2, ]))  # number of tokens per document [312, 288, 170, 436, 291, ...]\nN <- sum(doc.length)  # total number of tokens in the data (546,827)\nterm.frequency <- as.integer(term.table)  # frequencies of terms in the corpus [8939, 5544, 2411, 2410, 2143, ...]\nprint(c(D, W, N))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "11061220346a7146c18924d57742f5320b57a8d8"
+      },
+      "cell_type": "markdown",
+      "source": "### Строим модель LDA - Латентное размещение Дирихле.\n### Это т.н. порождающая модель - она как бы преполагает причины сходства некоторых частей данных. Её основные параметры - корпус документов в векторном пространстве, и число топиков, которое мы пожелаем.\n### Используем её прямо из коробки. Она некоторое время обсчитывает данные, поэтому я её создала и она у нас лежит забэкапленная в файле, чтобы лишний раз не пересчитывать\n### Хочется проверить, сможет ли lda прямо по тексту определить исходные темы, если я ей закажу 5 топиков прям как у нас исходно было"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "8e9db11512f2fed2f5c4afcd5d8a4652456da363"
+      },
+      "cell_type": "code",
+      "source": "K <- 5\nG <- 1000\nalpha <- 0.02\neta <- 0.02\n\n# Fit the model:\nlibrary(lda)\nset.seed(357)\n\nif (!file.exists(\"../working/son.json\")) {\n    print(\"GO\")\n    t1 <- Sys.time()\n    fit <- lda.collapsed.gibbs.sampler(documents = documents, K = K, vocab = vocab, \n                                       num.iterations = G, alpha = alpha, \n                                       eta = eta, initial = NULL, burnin = 0,\n                                       compute.log.likelihood = TRUE)\n\n\n    t2 <- Sys.time()\n    t2 - t1  # about 24 minutes on laptop\n\n    theta <- t(apply(fit$document_sums + alpha, 2, function(x) x/sum(x)))\n    phi <- t(apply(t(fit$topics) + eta, 2, function(x) x/sum(x)))\n\n    lda_data <- list(phi = phi,\n                         theta = theta,\n                         doc.length = doc.length,\n                         vocab = vocab,\n                         term.frequency = term.frequency)\n\n    # create the JSON object to feed the visualization:\n    json2 <- createJSON(phi = lda_data$phi, \n                       theta = lda_data$theta, \n                       doc.length = lda_data$doc.length, \n                       vocab = lda_data$vocab, \n                       term.frequency = lda_data$term.frequency)\n\n      write(json2, \"../working/son.json\")\n} else {\n    print(\"ne GO\")\n    json2 <- read_file(\"../working/son.json\")\n}",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "2d0db72198995c6d11cbecb7aad71b8364dc54fc"
+      },
+      "cell_type": "code",
+      "source": "# И опубликуем модель\nserVis(json2, out.dir = \"./\", open.browser = F)\n\nsystem(\"mv index.html results.html\")",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "97b440b05a3dac5d072c8e790a48b89c27458ef1"
+      },
+      "cell_type": "markdown",
+      "source": "### Короче она [смогла](https://www.kaggleusercontent.com/kf/8768071/eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..A8v8qZ3kkJngaUXBaA5Law.m23pzZ7IfWd0Qao8XV72MDQPU4LOnFbG_4i8eshDkBGFkIhmx46tPqrqKuX5mBtKECRCHX0VgXMLVoFXP766kCuIqCrIUS6j75QGB7MXB0qNuU9hRxobtJBCgWiraU7_NyN-EUdcakhBbHtBEql8VUtvMeBEVfFbqjEr6ST7ZBk.0sJv1x79TJ1xBBtXthLk2g/results.html) \nСсылка правда не работает отсюда - в папке output файл results.html"
+    },
+    {
+      "metadata": {
+        "_uuid": "23441e71bb616977c87a17035619d1976de9a154"
+      },
+      "cell_type": "markdown",
+      "source": "## В таких темах как бизнес и политика вообще непонятно что значат слова. Поэтому очень кстати будет разбиение на биграмы"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "ceaaa3befc39d5bcdaa657988eb5a68ab7c0c20f"
+      },
+      "cell_type": "code",
+      "source": "doc_bigrams <- new_full_df %>%\n  unnest_tokens(bigram, text, token = \"ngrams\", n = 2) \n\nhead(doc_bigrams)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "ff75fd1d32cbfe7c651cac800b3ce38ea3a46a87"
+      },
+      "cell_type": "code",
+      "source": "# Cleanse\nbigrams_separated <- doc_bigrams %>%\n  separate(bigram, c(\"word1\", \"word2\"), sep = \" \")\n\nbigrams_filtered <- bigrams_separated %>%\n  filter(!word1 %in% stop_words$word) %>%\n  filter(!word2 %in% stop_words$word) %>%\n  filter(str_detect(word1,\"[a-z]\") | str_detect(word2,\"[a-z]\"))\n\nbigram_counts <- bigrams_filtered %>% \n  count(word1, word2, sort = TRUE)\n\nhead(bigram_counts)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "1965e23b336087018209e0d0eafbf1aa1cbb0734"
+      },
+      "cell_type": "code",
+      "source": "bigrams_united <- bigrams_filtered %>%\n  unite(bigram, word1, word2, sep = \" \")",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7681421a38eb7c8e55c3e8b6ae11ec8e47b1e3c4"
+      },
+      "cell_type": "code",
+      "source": "bigram_tf_idf <- bigrams_united %>%\n  count(theme, bigram) %>%\n  bind_tf_idf(bigram, theme, n) %>%\n  arrange(desc(tf_idf))\n\nhead(bigram_tf_idf)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "3f0266a5e048c34c684e0ab11ef1b8e1997dfc14"
+      },
+      "cell_type": "markdown",
+      "source": "### Урра, картинка!"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "e1cebfc9b8dc5eeb6f117c182bbbcee31e31d3eb"
+      },
+      "cell_type": "code",
+      "source": "bigram_tf_idf %>%\n  group_by(theme) %>%\n  top_n(10, tf_idf) %>%\n  ungroup() %>%\n  ggplot(aes(x = reorder(bigram, tf_idf), y = tf_idf, fill = theme)) +\n  geom_col(show.legend = FALSE) +\n  facet_wrap(~theme, scales = \"free\", ncol = 2) +\n  labs(x = NULL, y = \"tf-idf\", title = \"The most importatnt bigrams in papers\") +\n  coord_flip()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "623173c830036c88657807fe9f8a65660c15977a"
+      },
+      "cell_type": "markdown",
+      "source": "### Надо заметить, что сейчас это выглядит гораздо, гораздо более внятно чем с отдельными словами"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "29c8fd0832535f0b28856fd95384a7a7eb9dfbec"
+      },
+      "cell_type": "code",
+      "source": "",
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "R",
+      "language": "R",
+      "name": "ir"
+    },
+    "language_info": {
+      "mimetype": "text/x-r-source",
+      "name": "R",
+      "pygments_lexer": "r",
+      "version": "3.4.2",
+      "file_extension": ".r",
+      "codemirror_mode": "r"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 1
+}
